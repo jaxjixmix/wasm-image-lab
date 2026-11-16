@@ -1,0 +1,13 @@
+{
+  "name": "wasm-image-lab",
+  "version": "0.1.0",
+  "description": "Differential-benchmark harness: Rust/WASM image kernels vs a JS reference implementation.",
+  "scripts": {
+    "build:wasm": "cargo build -p wasm --release --target wasm32-unknown-unknown && mkdir -p web/pkg && cp target/wasm32-unknown-unknown/release/wasm.wasm web/pkg/image_kernels.wasm",
+    "serve": "npx --yes http-server web -p 8080 -c-1",
+    "bench": "npm run build:wasm && npm run serve"
+  },
+  "license": "MIT",
+  "type": "module",
+  "private": true
+}

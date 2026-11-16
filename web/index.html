@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>wasm-image-lab — Rust vs JS image kernels</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --border: #30363d;
+    --text: #e6edf3; --dim: #8b949e; --accent: #f0a020; --good: #3fb950; --bad: #f85149;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 2rem; background: var(--bg); color: var(--text);
+    font: 15px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  h1 { font-size: 1.4rem; margin: 0 0 .25rem; }
+  .sub { color: var(--dim); margin-bottom: 2rem; font-size: .9rem; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1.5rem;
+  }
+  button {
+    background: var(--accent); color: #0d1117; border: 0; border-radius: 6px;
+    padding: .6rem 1.2rem; font: inherit; font-weight: 700; cursor: pointer;
+  }
+  button:disabled { opacity: .5; cursor: default; }
+  table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  th, td { text-align: left; padding: .4rem .5rem; border-bottom: 1px solid var(--border); }
+  th { color: var(--dim); font-weight: 600; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .ok { color: var(--good); }
+  .fail { color: var(--bad); }
+  #log { white-space: pre-wrap; color: var(--dim); font-size: .8rem; max-height: 18rem; overflow: auto; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
+  .grid figure { margin: 0; }
+  .grid figcaption { color: var(--dim); font-size: .75rem; margin-top: .35rem; }
+  canvas { width: 100%; border: 1px solid var(--border); border-radius: 6px; image-rendering: pixelated; }
+</style>
+</head>
+<body>
+  <h1>wasm-image-lab</h1>
+  <div class="sub">Rust → WebAssembly image kernels, differential-tested and benchmarked against a JS reference implementation.</div>
+
+  <div class="panel">
+    <button id="run">Run benchmark</button>
+    <span id="status" style="margin-left:1rem;color:var(--dim)">not started</span>
+  </div>
+
+  <div class="panel">
+    <div style="color:var(--dim);font-size:.8rem;margin-bottom:.5rem">CORRECTNESS — is Rust byte-identical to JS?</div>
+    <table id="correctness"><thead>
+      <tr><th>Size</th><th>Kernel</th><th>Result</th><th>Detail</th></tr>
+    </thead><tbody></tbody></table>
+  </div>
+
+  <div class="panel">
+    <div style="color:var(--dim);font-size:.8rem;margin-bottom:.5rem">SPEED — median of 20 runs after 5 warmup</div>
+    <table id="speed"><thead>
+      <tr><th>Size</th><th>Kernel</th><th class="num">JS ms</th><th class="num">WASM ms</th>
+      <th class="num">Speedup</th><th class="num">JS MP/s</th><th class="num">WASM MP/s</th></tr>
+    </thead><tbody></tbody></table>
+  </div>
+
+  <div class="panel">
+    <div style="color:var(--dim);font-size:.8rem;margin-bottom:.5rem">VISUAL — same input, JS vs Rust output</div>
+    <div class="grid" id="visual"></div>
+  </div>
+
+  <div class="panel">
+    <div style="color:var(--dim);font-size:.8rem;margin-bottom:.5rem">LOG</div>
+    <div id="log"></div>
+  </div>
+
+<script type="module">
+import { runBenchmark, makeFixtures } from './js/bench.js';
+import * as ref from './js/reference.js';
+
+const logEl = document.getElementById('log');
+const statusEl = document.getElementById('status');
+const btn = document.getElementById('run');
+const log = (m) => { logEl.textContent += m + '\n'; };
+
+/** Fetch and instantiate the raw wasm module. No bindgen glue. */
+async function loadWasm() {
+  // Cache-bust so rebuilds are picked up during development.
+  const res = await fetch(`./pkg/image_kernels.wasm?v=${Date.now()}`);
+  if (!res.ok) throw new Error(`fetch failed: ${res.status} — did you run \`npm run build:wasm\`?`);
+  const bytes = await res.arrayBuffer();
+  const { instance } = await WebAssembly.instantiate(bytes, {});
+  return instance.exports;
+}
+
+btn.addEventListener('click', async () => {
+  btn.disabled = true;
+  logEl.textContent = '';
+  statusEl.textContent = 'loading wasm…';
+
+  try {
+    const wasm = await loadWasm();
+    log(`wasm loaded — exported memory ${wasm.memory.buffer.byteLength} bytes`);
+    statusEl.textContent = 'running…';
+
+    const results = await runBenchmark(wasm, log);
+    render(results);
+    drawVisuals(wasm);
+    statusEl.textContent = 'done';
+  } catch (e) {
+    log('ERROR: ' + (e?.stack || e));
+    statusEl.textContent = 'failed';
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+function render(results) {
+  const cBody = document.querySelector('#correctness tbody');
+  const sBody = document.querySelector('#speed tbody');
+  cBody.innerHTML = '';
+  sBody.innerHTML = '';
+
+  for (const r of results.filter((x) => x.kind === 'correctness')) {
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      `<td>${r.size}</td><td>${r.kernel}</td>` +
+      `<td class="${r.ok ? 'ok' : 'fail'}">${r.ok ? 'identical' : 'MISMATCH'}</td>` +
+      `<td>${r.ok ? '—' : JSON.stringify(r.detail)}</td>`;
+    cBody.appendChild(tr);
+  }
+
+  for (const r of results.filter((x) => x.kind === 'speed')) {
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      `<td>${r.size}</td><td>${r.kernel}</td>` +
+      `<td class="num">${r.jsMedian.toFixed(2)}</td>` +
+      `<td class="num">${r.wasmMedian.toFixed(2)}</td>` +
+      `<td class="num">${r.speedup.toFixed(2)}x</td>` +
+      `<td class="num">${r.jsThroughput.toFixed(1)}</td>` +
+      `<td class="num">${r.wasmThroughput.toFixed(1)}</td>`;
+    sBody.appendChild(tr);
+  }
+}
+
+/**
+ * Render JS output beside Rust output for the same input, so a subtle
+ * mismatch is visible to the eye as well as to the byte comparator.
+ */
+function drawVisuals(ex) {
+  const host = document.getElementById('visual');
+  host.innerHTML = '';
+  const w = 320, h = 240, px = w * h;
+  const { luma } = makeFixtures(w, h);
+
+  const imports = [
+    ['source luma', luma],
+  ];
+
+  // Rust view: run sobel inside wasm and read the result back out.
+  const pIn = ex.alloc(px);
+  const pOut = ex.alloc(px);
+  new Uint8Array(ex.memory.buffer, pIn, px).set(luma);
+  ex.sobel(pIn, pOut, w, h);
+  const rustEdges = new Uint8Array(ex.memory.buffer, pOut, px).slice();
+  ex.dealloc(pIn, px);
+  ex.dealloc(pOut, px);
+
+  // JS reference view.
+  const jsEdges = new Uint8Array(px);
+  ref.sobel(luma, jsEdges, w, h);
+
+  imports.push(['sobel — Rust/WASM', rustEdges], ['sobel — JS reference', jsEdges]);
+
+  for (const [label, data] of imports) {
+    const fig = document.createElement('figure');
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const ctx = cv.getContext('2d');
+    const img = ctx.createImageData(w, h);
+    for (let i = 0; i < px; i++) {
+      img.data[i * 4] = data[i];
+      img.data[i * 4 + 1] = data[i];
+      img.data[i * 4 + 2] = data[i];
+      img.data[i * 4 + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+    const cap = document.createElement('figcaption');
+    cap.textContent = label;
+    fig.append(cv, cap);
+    host.appendChild(fig);
+  }
+}
+</script>
+</body>
+</html>

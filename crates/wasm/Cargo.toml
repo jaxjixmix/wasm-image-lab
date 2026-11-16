@@ -1,0 +1,12 @@
+[package]
+name = "wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Raw C-ABI surface over the pure-Rust kernels. No wasm-bindgen: the module is a plain wasm binary with an exported memory, so the benchmark measures Rust, not glue code."
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+kernels = { path = "../kernels" }
