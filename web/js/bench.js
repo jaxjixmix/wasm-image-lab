@@ -140,7 +140,9 @@ export async function runBenchmark(wasmModule, log = console.log) {
     {
       const a = ref.sobel(luma, new Uint8Array(px), w, h);
       mem.u8(pLumaIn, px).set(luma);
-      wasmModule.sobel(pLumaIn, px, w, h);
+      // dst pointer is REQUIRED: sobel(src, dst, w, h). Passing px here silently
+      // wrote 262KB at address `px` instead of into pDst.
+      wasmModule.sobel(pLumaIn, pDst, w, h);
       // sobel writes via dst pointer — re-read from pDst after call
       // (the wasm fn signature takes dst pointer)
       const b = mem.u8(pDst, px).slice();

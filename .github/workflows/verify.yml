@@ -38,6 +38,14 @@ jobs:
       - name: Differential verification (Rust vs JS reference)
         run: node scripts/verify.mjs
 
+      # scripts/verify.mjs has its own wasm plumbing, so it duplicated the
+      # browser harness rather than exercising it. A wrong-arity call in
+      # web/js/bench.js (a length passed where a pointer belonged) therefore
+      # survived with CI green. This step runs the real harness in Node and
+      # checks export arity by name.
+      - name: Browser harness end-to-end
+        run: node scripts/verify-browser-harness.mjs
+
       - name: Upload wasm artifact
         uses: actions/upload-artifact@v4
         with:
