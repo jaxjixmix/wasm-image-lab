@@ -45,7 +45,7 @@ pub fn box_blur(src: &[u8], out: &mut [u8], scratch: &mut [u8], w: usize, h: usi
             scratch[row + x] = (sum / win) as u8;
 
             // Slide: drop the pixel leaving the window, add the entering one.
-            let out_x = if x >= r { x - r } else { 0 };
+            let out_x = x.saturating_sub(r);
             sum -= src[row + out_x] as u32;
 
             let in_raw = x + r + 1;
@@ -68,7 +68,7 @@ pub fn box_blur(src: &[u8], out: &mut [u8], scratch: &mut [u8], w: usize, h: usi
         for y in 0..h {
             out[y * w + x] = (sum / win) as u8;
 
-            let out_y = if y >= r { y - r } else { 0 };
+            let out_y = y.saturating_sub(r);
             sum -= scratch[out_y * w + x] as u32;
 
             let in_raw = y + r + 1;

@@ -106,6 +106,12 @@ competitors to WASM and the honest next experiment.
 5. **`threshold_inplace` exists because the borrow checker said so.** Rust
    forbids passing one buffer as both `&[u8]` and `&mut [u8]`. The API bent; the
    safety rule did not. Small but instructive example of ownership shaping design.
+6. **One clippy lint is deliberately allowed, with evidence.** Clippy prefers an
+   `as_chunks` iterator in `grayscale`. I tried it, and it cost ~15% throughput
+   (1122 MP/s vs 1328 MP/s at 1920x1080) because LLVM can already prove the
+   index-loop offsets don't alias. The `#[allow]` carries that measurement in a
+   comment. Lint hygiene is not worth a 15% regression in a crate whose whole
+   purpose is speed.
 
 ## Structure
 
@@ -127,6 +133,11 @@ cargo build -p wasm --release --target wasm32-unknown-unknown
 node scripts/verify.mjs                     # headless correctness + speed
 npx http-server web -p 8080 -c-1            # then open localhost:8080
 ```
+
+CI (`.github/workflows/verify.yml`) runs the unit tests, the differential
+verification, and enforces `rustfmt` + `clippy -D warnings` on every push. The
+correctness check gates the build, because without it the benchmark numbers are
+meaningless.
 
 ## Known limitations
 

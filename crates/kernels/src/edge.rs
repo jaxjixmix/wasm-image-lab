@@ -76,6 +76,6 @@ mod tests {
         assert!(out[4 * w + 3] > 200, "left side of edge");
         assert!(out[4 * w + 4] > 200, "right side of edge");
         // Far from the step there should be nothing.
-        assert_eq!(out[4 * w + 0], 0);
+        assert_eq!(out[4 * w], 0);
     }
 }

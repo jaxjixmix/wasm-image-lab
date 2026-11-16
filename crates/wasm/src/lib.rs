@@ -50,7 +50,12 @@ pub unsafe extern "C" fn dealloc(ptr: *mut u8, len: usize) {
 /// # Safety
 /// Both pointers must be valid for the stated lengths within linear memory.
 #[no_mangle]
-pub unsafe extern "C" fn grayscale(src_ptr: *const u8, src_len: usize, dst_ptr: *mut u8, dst_len: usize) {
+pub unsafe extern "C" fn grayscale(
+    src_ptr: *const u8,
+    src_len: usize,
+    dst_ptr: *mut u8,
+    dst_len: usize,
+) {
     let src = std::slice::from_raw_parts(src_ptr, src_len);
     let dst = std::slice::from_raw_parts_mut(dst_ptr, dst_len);
     kernels::grayscale(src, dst);

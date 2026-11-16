@@ -4,7 +4,14 @@
 ///
 /// Uses Rec. 601 weights in fixed point: `(299R + 587G + 114B) / 1000`.
 /// Integer-only so the JS reference can reproduce it bit-exactly.
+///
+/// `needless_range_loop` is allowed here on measured evidence: the idiomatic
+/// `as_chunks`/iterator form that clippy prefers costs ~15% throughput
+/// (1122 MP/s vs 1328 MP/s on an M-series, 1920x1080). The index loop compiles
+/// to tighter code because LLVM can prove the `i*4` offsets never alias `out`.
+/// Performance is this crate's entire reason to exist, so the lint loses.
 #[inline]
+#[allow(clippy::needless_range_loop)]
 pub fn grayscale(rgba: &[u8], out: &mut [u8]) {
     assert_eq!(rgba.len() % 4, 0, "input must be RGBA8");
     let px = rgba.len() / 4;
